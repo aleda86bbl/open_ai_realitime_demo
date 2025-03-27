@@ -1,0 +1,11 @@
+name: open_ai_realtime_demo
+channels: 
+  - conda-forge
+dependencies:
+  - autopep8
+  - python
+  - pip
+  - pip:
+      - pyaudio
+      - pynput
+      - websocket-client
