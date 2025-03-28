@@ -18,6 +18,7 @@ RATE = 48000
 CHUNK = 1024
 IS_RECORDING = False
 SAMPLE_WIDTH = 0
+LANGUAGE = 'Thai'
 
 audio_frames_input = []
 audio_frames_output = []
@@ -112,7 +113,8 @@ def stop_and_send_voice_recording_to_server(ws):
     event = {
         'type': 'response.create',
         'response': {
-            'instructions': 'Reply with a translation of the last conversation item.'
+            'instructions': f'Repeat user input in {LANGUAGE}. Attempt to literally translate user input. The exception is when the user \
+            asks to switch language then the system should call the function to switch language.'
         }
     }
     ws.send(json.dumps(event))
@@ -125,11 +127,64 @@ def on_open(ws):
         'type': 'session.update',
         'session': {
             'modalities': ['text', 'audio'],
-            'instructions': 'You are a professional multi-language interpreter who will provide both oral and written translations from English to Thai.',
+            'instructions': f'You are a professional multi-language interpreter who will provide both oral and written translations from English to {LANGUAGE}.',
             'turn_detection': None,
-        },
+            'tools': [{
+                'type': 'function',
+                'name': 'select_language',
+                'description': 'Set the desired target language for the assistant.',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'language': {
+                            'type': 'string',
+                            'description': 'The target language for the assistant to speak.',
+                            'enum': [
+                                'Thai',
+                                'Mandarin',
+                                'French',
+                                'German',
+                                'Spanish',
+                                'Swedish',
+                                'Italian',
+                                'Japanese',
+                                'Burmese',
+                                'Lao'
+                            ]
+                        }
+                    },
+                    'required': ['language']
+                }
+            }
+            ],
+            'tool_choice': 'auto',
+        }
     }
     ws.send(json.dumps(event))
+    welcome_prompt = f"""
+        Say exactly the following:
+        Hello, I am your friendly interpreter,
+        speak to me and I will reply back to you
+        in your desired language.
+
+        The target language for translation is {LANGUAGE}
+        but you can ask me to change it any time  .
+        """
+
+    event = {
+        'type': 'response.create',
+        'response': {
+            'input': [],
+            'instructions': welcome_prompt
+        }
+    }
+    ws.sent(json.dumps(event))
+
+
+
+def select_language(input_language):
+    LANGUAGE = input_language
+    print(f'Switching language to {LANGUAGE}')
 
 
 def on_message(ws, message):
@@ -142,6 +197,12 @@ def on_message(ws, message):
         play_voice_response(audio_obj)
     if server_event['type'] == 'response.audio_transcript.done':
         print(f'Assistant: {server_event["transcript"]}')
+    if server_event['type'] == 'response.done':
+        if server_event['response']['output'][0]['type'] == 'function_call' and \
+                server_event['response']['output'][0]['name'] == 'select_language':
+            args = json.loads(server_event['response']['output'][0]['arguments'])
+            select_language(args['language'])
+
     logger.info(f'Received event:\n{json.dumps(server_event, indent=2)}')
 
 
